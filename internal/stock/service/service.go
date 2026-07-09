@@ -6,7 +6,7 @@ import (
 )
 
 type Repository interface {
-	GetTickers() ([]string, error)
+	GetStocks() ([]models.Stock, error)
 	GetByTicker(t string) (*models.Stock, error)
 	CreateStock(stock *models.Stock) error
 	GetPriceHistory(ticker string, period time.Time) ([]models.StockPriceLog, error)
@@ -20,8 +20,8 @@ func New(db Repository) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) GetTickers() ([]string, error) {
-	return s.db.GetTickers()
+func (s *Service) GetStocks() ([]models.Stock, error) {
+	return s.db.GetStocks()
 }
 
 func (s *Service) GetByTicker(t string) (*models.Stock, error) {

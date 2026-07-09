@@ -9,25 +9,31 @@ import (
 
 const (
 	insertTransactionQuery = `
-		INSERT INTO market.transactions (user_id, ticker_id, operation_type, qty, price, currency)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id, created_at`
+       INSERT INTO market.transactions (user_id, ticker_id, operation_type, qty, price, currency)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, created_at`
 
 	upsertPortfolioQuery = `
-		INSERT INTO portfolio.portfolios (user_id, ticker_id, qty)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (user_id, ticker_id) 
-		DO UPDATE SET qty = portfolio.portfolios.qty + EXCLUDED.qty, updated_at = NOW()
-		RETURNING qty`
+       INSERT INTO portfolio.portfolios (user_id, ticker_id, qty)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, ticker_id) 
+       DO UPDATE SET qty = portfolio.portfolios.qty + EXCLUDED.qty, updated_at = NOW()
+       RETURNING qty`
+
+	updatePortfolioSellQuery = `
+       UPDATE portfolio.portfolios 
+       SET qty = qty - $3, updated_at = NOW()
+       WHERE user_id = $1 AND ticker_id = $2
+       RETURNING qty`
 
 	deleteEmptyPortfolioQuery = `
-		DELETE FROM portfolio.portfolios 
-		WHERE user_id = $1 AND ticker_id = $2 AND qty = 0`
+       DELETE FROM portfolio.portfolios 
+       WHERE user_id = $1 AND ticker_id = $2 AND qty = 0`
 
 	getPortfolioQtyQuery = `
-		SELECT qty 
-		FROM portfolio.portfolios 
-		WHERE user_id = $1 AND ticker_id = $2`
+       SELECT qty 
+       FROM portfolio.portfolios 
+       WHERE user_id = $1 AND ticker_id = $2`
 )
 
 type Store struct {
@@ -54,7 +60,6 @@ func (s *Store) CreateTransaction(ctx context.Context, txModel *models.Transacti
 	}
 	defer tx.Rollback()
 
-	// пишем лог транзакций
 	err = tx.QueryRowContext(ctx, insertTransactionQuery,
 		txModel.UserID, txModel.TickerID, txModel.OperationType,
 		txModel.Qty, txModel.Price, txModel.Currency,
@@ -63,22 +68,16 @@ func (s *Store) CreateTransaction(ctx context.Context, txModel *models.Transacti
 		return err
 	}
 
-	// считаем изменения для баланса портфеля
-	var qtyChange int
-	if txModel.OperationType == models.OpBuy {
-		qtyChange = txModel.Qty
-	} else {
-		qtyChange = -txModel.Qty
-	}
-
-	// обновляем или создаем запись в портфеле
 	var newQty int
-	err = tx.QueryRowContext(ctx, upsertPortfolioQuery, txModel.UserID, txModel.TickerID, qtyChange).Scan(&newQty)
+	if txModel.OperationType == models.OpBuy {
+		err = tx.QueryRowContext(ctx, upsertPortfolioQuery, txModel.UserID, txModel.TickerID, txModel.Qty).Scan(&newQty)
+	} else {
+		err = tx.QueryRowContext(ctx, updatePortfolioSellQuery, txModel.UserID, txModel.TickerID, txModel.Qty).Scan(&newQty)
+	}
 	if err != nil {
 		return err
 	}
 
-	// если продали всё в ноль, то удаляем строку
 	if newQty == 0 {
 		_, err = tx.ExecContext(ctx, deleteEmptyPortfolioQuery, txModel.UserID, txModel.TickerID)
 		if err != nil {

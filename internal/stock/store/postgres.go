@@ -7,11 +7,10 @@ import (
 )
 
 const (
-	getTickersQuery = `
-		SELECT ticker 
+	getStocksQuery = `
+		SELECT id, ticker, stock_name, stock_price, currency, updated_at, source
 		FROM market.stocks
-		ORDER BY id`
-
+		ORDER BY ticker`
 	getByTickerQuery = `
 		SELECT id, ticker, stock_name, stock_price, currency, updated_at, source 
 		FROM market.stocks 
@@ -38,31 +37,38 @@ func New(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-func (s *Store) GetTickers() ([]string, error) {
-	rows, err := s.db.Query(getTickersQuery)
+func (s *Store) GetStocks() ([]models.Stock, error) {
+	rows, err := s.db.Query(getStocksQuery)
 	if err != nil {
 		return nil, err
 	}
 
 	defer rows.Close()
 
-	var tickers []string
+	var stocks []models.Stock
 
 	for rows.Next() {
-		var ticker string
+		var stock models.Stock
 
-		if err := rows.Scan(&ticker); err != nil {
+		if err := rows.Scan(
+			&stock.ID,
+			&stock.Ticker,
+			&stock.StockName,
+			&stock.StockPrice,
+			&stock.Currency,
+			&stock.UpdatedAt,
+			&stock.Source); err != nil {
 			return nil, err
 		}
 
-		tickers = append(tickers, ticker)
+		stocks = append(stocks, stock)
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
 
-	return tickers, nil
+	return stocks, nil
 }
 
 func (s *Store) GetByTicker(t string) (*models.Stock, error) {

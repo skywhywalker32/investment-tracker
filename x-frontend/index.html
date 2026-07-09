@@ -1,0 +1,425 @@
+﻿<!DOCTYPE html>
+<html lang="ru" xmlns:x-transition="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Investment Tracker Dashboard</title>
+    <script src="./assets/tailwind.js"></script>
+    <script defer src="./assets/alpine.min.js"></script>
+    <script src="./assets/chart.min.js"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 font-sans antialiased min-h-screen" x-data="dashboardApp()">
+
+<div class="fixed top-5 right-5 z-50 space-y-3 w-80 pointer-events-none">
+    <template x-for="toast in toasts" :key="toast.id">
+        <div x-show="toast.show"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-[-20px] scale-95"
+             x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95"
+             class="p-4 rounded-xl shadow-2xl border text-xs font-medium pointer-events-auto flex justify-between items-center"
+             :class="{
+                    'bg-emerald-950/90 border-emerald-500/30 text-emerald-400': toast.type === 'success',
+                    'bg-red-950/90 border-red-500/30 text-red-400': toast.type === 'error',
+                    'bg-blue-950/90 border-blue-500/30 text-blue-400': toast.type === 'info'
+                 }">
+            <span x-text="toast.message"></span>
+            <button @click="toast.show = false" class="ml-4 text-gray-400 hover:text-white font-bold">✕</button>
+        </div>
+    </template>
+</div>
+
+<div class="max-w-6xl mx-auto px-4 py-6">
+    <header class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-gray-800 pb-6 mb-8 gap-4">
+        <div>
+            <h1 class="text-3xl font-black text-white tracking-tight bg-gradient-to-r from-emerald-400 to-teal-500 bg-clip-text text-transparent">
+                Vortex
+            </h1>
+            <p class="text-gray-400 text-xs mt-1">Сервис управления инвестициями</p>
+        </div>
+
+        <div class="flex items-center gap-6 bg-gray-900 p-3 rounded-xl border border-gray-800 shadow-inner w-full md:w-auto justify-between md:justify-end">
+            <div class="text-right">
+                <span class="text-gray-400 text-[10px] uppercase tracking-wider block">Баланс (USD)</span>
+                <span class="text-2xl font-mono font-bold text-emerald-400" x-text="formatCurrency(balance)"></span>
+            </div>
+            <div class="flex items-center gap-3 border-l border-gray-800 pl-6">
+                <div class="text-right hidden sm:block">
+                    <span class="text-white font-medium text-sm block">Sempi</span>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center font-bold text-white shadow-md">
+                    ИС
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <section class="lg:col-span-2 space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Текущие активы в портфеле
+                </h2>
+                <button @click="refreshData()" class="text-xs text-gray-400 hover:text-white transition-colors">
+                    🔄 Обновить данные
+                </button>
+            </div>
+
+            <div class="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden shadow-xl">
+                <div x-show="loading" class="text-center py-12 text-gray-500 font-mono text-sm">
+                    Запрос к Go API...
+                </div>
+
+                <table x-show="!loading" class="w-full text-left border-collapse">
+                    <thead>
+                    <tr class="bg-gray-900/50 border-b border-gray-800 text-gray-400 text-[11px] uppercase tracking-wider">
+                        <th class="py-3 px-4">Тикер</th>
+                        <th class="py-3 px-4">Компания</th>
+                        <th class="py-3 px-4 text-right">Кол-во</th>
+                        <th class="py-3 px-4 text-right">Цена</th>
+                        <th class="py-3 px-4 text-right">Итого</th>
+                    </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-800 text-xs">
+                    <template x-for="item in portfolio" :key="item.ticker">
+                        <tr class="hover:bg-gray-850/50 transition-colors cursor-pointer" @click="openChart(item)">
+                            <td class="py-4 px-4 font-mono font-bold text-emerald-400" x-text="item.ticker"></td>
+                            <td class="py-4 px-4 text-gray-300 max-w-[120px] truncate" x-text="item.stock_name"></td>
+                            <td class="py-4 px-4 text-right font-semibold font-mono" x-text="item.qty"></td>
+                            <td class="py-4 px-4 text-right font-mono text-gray-400" x-text="formatCurrency(item.current_price)"></td>
+                            <td class="py-4 px-4 text-right font-mono font-bold text-white" x-text="formatCurrency(item.qty * item.current_price)"></td>
+                        </tr>
+                    </template>
+
+                    <tr x-show="portfolio.length === 0">
+                        <td colspan="5" class="text-center py-12 text-gray-600 italic">
+                            Портфель пуст. Купите акции в панели справа.
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="space-y-4">
+            <h2 class="text-xl font-bold text-white">Сделка</h2>
+
+            <div class="bg-gray-900 rounded-xl border border-gray-800 p-5 shadow-xl space-y-4">
+                <div>
+                    <label class="block text-gray-400 text-[11px] uppercase tracking-wider mb-2 font-medium">Выберите актив (Из БД)</label>
+                    <select x-model="form.tickerId" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 font-mono text-white">
+                        <template x-for="stock in dbStocks" :key="stock.id">
+                            <option :value="String(stock.id)"
+                                    x-text="`${stock.ticker} — ${formatCurrency(stock.stock_price)}`"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-gray-400 text-[11px] uppercase tracking-wider mb-2 font-medium">Количество (шт)</label>
+                    <input type="number" min="1" x-model.number="form.qty" class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 font-mono text-white">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 pt-2">
+                    <button @click="submitTransaction('buy')" class="bg-emerald-500 hover:bg-emerald-600 text-gray-950 font-bold py-2.5 px-4 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-md shadow-emerald-500/10">
+                        Купить
+                    </button>
+                    <button @click="submitTransaction('sell')" class="bg-transparent hover:bg-red-500/10 border border-red-500/30 hover:border-red-500 text-red-400 font-bold py-2.5 px-4 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer">
+                        Продать
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 transition-opacity"
+         x-show="isChartOpen"
+         x-transition:enter="ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @click="closeChart()"
+         style="display: none;">
+
+        <div class="fixed bottom-0 left-0 right-0 max-w-4xl mx-auto bg-gray-900 border-t border-gray-800 rounded-t-2xl p-6 z-50 shadow-2xl transition-transform transform"
+             @click.stop
+             x-show="isChartOpen"
+             x-transition:enter="ease-out duration-300"
+             x-transition:enter-start="translate-y-full"
+             x-transition:enter-end="translate-y-0"
+             x-transition:leave="ease-in duration-200"
+             x-transition:leave-start="translate-y-0"
+             x-transition:leave-end="translate-y-full">
+
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <span class="text-emerald-400 font-mono" x-text="selectedStock.ticker"></span>
+                        — Динамика стоимости цены (<span x-text="chartDays"></span> дней)
+                    </h3>
+                    <p class="text-gray-400 text-xs">Данные логов генерации `market.stock_price_logs`</p>
+                </div>
+                <button @click="closeChart()" class="text-gray-500 hover:text-white bg-gray-950 w-8 h-8 rounded-full border border-gray-800 flex items-center justify-center text-sm font-bold transition-colors">
+                    ✕
+                </button>
+            </div>
+
+            <div class="bg-gray-950 p-4 rounded-xl border border-gray-850 h-64 relative">
+                <canvas id="historyChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function dashboardApp() {
+        return {
+            userId: 1,
+            balance: 10000,
+            portfolio: [],
+            dbStocks: [],
+            loading: true,
+            isChartOpen: false,
+            selectedStock: {},
+            chartInstance: null,
+            toasts: [],
+            chartDays: 0,
+
+            form: {
+                tickerId: "",
+                qty: 1
+            },
+
+            stocksMap: {},
+
+            async init() {
+                this.loading = true;
+                await this.refreshData();
+                this.loading = false;
+            },
+
+            addToast(message, type = 'success') {
+                const id = Date.now();
+                this.toasts.push({ id, message, type, show: true });
+                setTimeout(() => {
+                    const idx = this.toasts.findIndex(t => t.id === id);
+                    if (idx !== -1) this.toasts[idx].show = false;
+                }, 4000);
+            },
+
+            async refreshData() {
+                await this.fetchStocksFromDB();
+                await this.fetchPortfolio();
+            },
+
+            async fetchStocksFromDB() {
+                try {
+                    const response = await fetch('http://localhost:3030/api/v1/stocks');
+
+                    if (!response.ok) {
+                        let errorMessage = `Ошибка каталога (${response.status})`;
+                        const contentType = response.headers.get("content-type");
+                        if (contentType && contentType.includes("application/json")) {
+                            const errData = await response.json();
+                            errorMessage = errData.message || errorMessage;
+                        } else {
+                            errorMessage = await response.text();
+                        }
+                        throw new Error(errorMessage);
+                    }
+
+                    const data = await response.json();
+                    this.dbStocks = data.tickers;
+
+                    this.stocksMap = {};
+                    this.dbStocks.forEach(s => {
+                        const id = String(s.id);
+                        this.stocksMap[id] = {
+                            ticker: s.ticker,
+                            price: s.stock_price,
+                            name: s.stock_name,
+                            currency: s.currency || 'USD'
+                        };
+                    });
+
+                    this.$nextTick(() => {
+                        if (this.dbStocks.length > 0) {
+                            if (!this.form.tickerId || !this.stocksMap[this.form.tickerId]) {
+                                this.form.tickerId = String(this.dbStocks[0].id);
+                            }
+                        }
+                    });
+                } catch (error) {
+                    this.addToast("Ошибка каталога: " + error.message, "error");
+                }
+            },
+
+            async fetchPortfolio() {
+                try {
+                    const response = await fetch(`http://localhost:3030/api/v1/users/${this.userId}/portfolio`);
+
+                    if (!response.ok) {
+                        let errorMessage = `Ошибка портфеля (${response.status})`;
+                        const contentType = response.headers.get("content-type");
+                        if (contentType && contentType.includes("application/json")) {
+                            const errData = await response.json();
+                            errorMessage = errData.message || errorMessage;
+                        } else {
+                            errorMessage = await response.text();
+                        }
+                        throw new Error(errorMessage);
+                    }
+
+                    const data = await response.json();
+                    this.portfolio = data.portfolio || [];
+                } catch (error) {
+                    this.addToast("Ошибка портфеля: " + error.message, "error");
+                }
+            },
+
+            async submitTransaction(type) {
+                const stock = this.stocksMap[this.form.tickerId];
+                if (!stock) {
+                    this.addToast("Выбранный актив не найден в каталоге!", "error");
+                    return;
+                }
+
+                const totalCost = stock.price * this.form.qty;
+
+                if (type === 'buy' && this.balance < totalCost) {
+                    this.addToast("Недостаточно виртуального баланса!", "error");
+                    return;
+                }
+
+                const payload = {
+                    user_id: this.userId,
+                    ticker_id: parseInt(this.form.tickerId),
+                    operation_type: type,
+                    qty: this.form.qty,
+                    price: parseFloat(stock.price),
+                    currency: stock.currency
+                };
+
+                try {
+                    const response = await fetch('http://localhost:3030/api/v1/transactions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        let errorMessage = `Ошибка сервера (${response.status})`;
+                        const contentType = response.headers.get("content-type");
+
+                        if (contentType && contentType.includes("application/json")) {
+                            const errData = await response.json();
+                            errorMessage = errData.message || errorMessage;
+                        } else {
+                            errorMessage = await response.text();
+                        }
+                        throw new Error(errorMessage);
+                    }
+
+                    if (type === 'buy') {
+                        this.balance -= totalCost;
+                    } else {
+                        this.balance += totalCost;
+                    }
+
+                    await this.refreshData();
+                    this.addToast(`Сделка (${type === 'buy' ? 'Покупка' : 'Продажа'}) успешно проведена!`, "success");
+                } catch (error) {
+                    this.addToast(error.message, "error");
+                }
+            },
+
+            async openChart(item) {
+                this.selectedStock = item;
+                this.isChartOpen = true;
+                this.chartDays = 0;
+
+                try {
+                    const response = await fetch(`http://localhost:3030/api/v1/stocks/${item.ticker}/prices?period=720h`);
+
+                    if (!response.ok) {
+                        throw new Error(`Не удалось загрузить историю цен (${response.status})`);
+                    }
+
+                    const resData = await response.json();
+
+                    const priceLogs = resData.history || [];
+
+                    if (priceLogs.length === 0) {
+                        throw new Error("История цен для данного тикера пуста.");
+                    }
+
+                    this.chartDays = priceLogs.length;
+
+                    const labels = priceLogs.map(log => {
+                        if (!log.updated_at) return '';
+                        const dateObj = new Date(log.updated_at);
+                        return !isNaN(dateObj.getTime())
+                            ? dateObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+                            : log.updated_at;
+                    });
+
+                    const dataPoints = priceLogs.map(log => log.price);
+
+                    this.$nextTick(() => {
+                        const ctx = document.getElementById('historyChart').getContext('2d');
+
+                        if (this.chartInstance) {
+                            this.chartInstance.destroy();
+                        }
+
+                        this.chartInstance = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: `Цена ${item.ticker} ($)`,
+                                    data: dataPoints,
+                                    borderColor: '#10b981',
+                                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                    fill: true,
+                                    tension: 0.3
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    y: { grid: { color: '#1f2937' }, ticks: { color: '#9ca3af' } },
+                                    x: { grid: { display: false }, ticks: { color: '#9ca3af' } }
+                                }
+                            }
+                        });
+                    });
+
+                } catch (error) {
+                    this.addToast(error.message, "error");
+                    if (this.chartInstance) {
+                        this.chartInstance.destroy();
+                        this.chartInstance = null;
+                    }
+                }
+            },
+
+            closeChart() {
+                this.isChartOpen = false;
+            },
+
+            formatCurrency(value) {
+                return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+            }
+        }
+    }
+</script>
+</body>
+</html>

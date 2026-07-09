@@ -17,6 +17,7 @@ import (
 	portfoliostore "investment-tracker/internal/portfolio/store"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -36,6 +37,8 @@ func main() {
 
 	app := fiber.New()
 
+	app.Use(cors.New())
+
 	skStore := stockstore.New(db)
 	txStore := txstore.New(db)
 	prStore := portfoliostore.New(db)
@@ -48,7 +51,7 @@ func main() {
 	txHandler := txhttp.NewHandler(txSvc)
 	prHandler := portfoliohttp.NewHandler(prSvc)
 
-	app.Get("/api/v1/stocks", skHandler.GetTickers)
+	app.Get("/api/v1/stocks", skHandler.GetStocks)
 	app.Get("/api/v1/stocks/:ticker", skHandler.GetByTicker)
 	app.Post("/api/v1/stocks", skHandler.CreateStock)
 	app.Get("/api/v1/stocks/:ticker/prices", skHandler.GetPriceHistory)

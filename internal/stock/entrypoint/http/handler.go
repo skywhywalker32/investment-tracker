@@ -17,8 +17,8 @@ func NewHandler(svc *service.Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-func (h *Handler) GetTickers(c fiber.Ctx) error {
-	tickers, err := h.svc.GetTickers()
+func (h *Handler) GetStocks(c fiber.Ctx) error {
+	stocks, err := h.svc.GetStocks()
 	if err != nil {
 		log.Printf("error fetching tickers from db: %v", err)
 
@@ -27,7 +27,7 @@ func (h *Handler) GetTickers(c fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).
 		JSON(fiber.Map{
-			"tickers": tickers,
+			"tickers": stocks,
 		})
 }
 
