@@ -9,3 +9,11 @@ type Portfolio struct {
 	Qty       int       `json:"qty"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+type PortfolioItem struct {
+	Ticker       string  `json:"ticker"`
+	StockName    string  `json:"stock_name"`
+	Qty          int     `json:"qty"`
+	CurrentPrice float64 `json:"current_price"`
+	Currency     string  `json:"currency"`
+}
